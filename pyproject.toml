@@ -1,0 +1,9 @@
+[project]
+name = "granite-switch-agent"
+version = "0.1.0"
+description = "A ReAct agent using Granite Switch (on llama.cpp) as its brain, with embedded RAG adapter functions exposed as LLM-selectable tools."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+]
