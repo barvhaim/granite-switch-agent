@@ -43,6 +43,11 @@ SYSTEM_PROMPT = (
 
 MAX_STEPS = 8
 
+# Names the model might emit as bare text when it means to *call* a tool. Small
+# models sometimes write the tool name instead of producing a real tool call; we
+# detect that so we don't hand the raw word back as the answer.
+TOOL_NAMES = {t["function"]["name"] for t in TOOL_SCHEMAS}
+
 
 class Colors:
     DIM = "\033[2m"
@@ -83,9 +88,29 @@ class Agent:
             result = self.client.chat(messages, tools=TOOL_SCHEMAS, max_tokens=512)
 
             if not result.tool_calls:
+                answer = result.content.strip()
+                # Guard: the model sometimes writes a tool's name as plain text
+                # instead of emitting a real tool call. Don't surface that word as
+                # the answer — nudge it to either call the tool or answer properly.
+                if answer in TOOL_NAMES:
+                    self._log(
+                        _c(f"  [step {step}] NUDGE  bare tool name {answer!r}", Colors.YELLOW)
+                    )
+                    messages.append({"role": "assistant", "content": answer})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"To use the {answer} tool you must emit a real "
+                                "tool call, not its name as text. Do this now. If "
+                                "the retrieved documents do not contain the answer, "
+                                "say so plainly — do not answer from prior knowledge."
+                            ),
+                        }
+                    )
+                    continue
                 # No tool call → the model is answering.
                 self._log(f"\n{_c('ANSWER', Colors.BOLD + Colors.GREEN)}")
-                answer = result.content.strip()
                 self._commit(question, answer)
                 return answer
 
