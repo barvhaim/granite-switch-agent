@@ -5,8 +5,8 @@ The base model does the reasoning and decides which tools to call. Two tool
 kinds are dispatched differently by the harness:
 
   * ``search_docs`` — an ordinary external tool (retrieval).
-  * ``query_rewrite`` / ``answerability`` / ``query_clarification`` — *adapter*
-    tools. The model chooses them like any tool, but the harness executes each by
+  * ``query_rewrite`` / ``answerability`` — *adapter* tools. The model chooses
+    them like any tool, but the harness executes each by
     re-invoking the SAME model with that embedded adapter activated
     (``adapter_name``), then feeds the adapter's structured output back as the
     tool observation.

@@ -13,7 +13,6 @@ Two kinds of tool, dispatched differently:
 | `search_docs` | external | plain Python over an in-memory corpus |
 | `query_rewrite` | adapter | re-invoke the model with `adapter_name="query_rewrite"` |
 | `answerability` | adapter | re-invoke with `adapter_name="answerability"` + `documents` |
-| `query_clarification` | adapter | re-invoke with `adapter_name="query_clarification"` + `documents` |
 
 The base model *selects* an adapter tool like any other; the harness performs the mechanically-correct activation (an adapter is a per-request property, not something the model emits inline) and feeds the adapter's structured output back as the observation.
 
@@ -26,7 +25,9 @@ client.chat(messages, adapter_name="answerability", documents=docs)
 # → POST /v1/chat/completions  { ..., "chat_template_kwargs": {"adapter_name": "answerability", "documents": [...]} }
 ```
 
-**Why only these three adapters?** They are *envelope-free* — their trained input is just messages + documents, which the chat template already produces. The other adapters (`citations`, `guardian-core`, and the judge family) need a specific trained input envelope (the `<guardian>` criteria protocol, `<c0>/<r0>` sentence tagging) that llama.cpp's template does **not** build. Adding those means pulling in [Mellea](https://mellea.ai)'s `IntrinsicsRewriter` to construct the envelope — intentionally out of scope here to keep the demo dependency-free.
+**Why only these two adapters?** They are *envelope-free* — their trained input is just messages + documents, which the chat template already produces, and they emit tight, well-formed output over the raw template. The other adapters (`citations`, `guardian-core`, and the judge family) need a specific trained input envelope (the `<guardian>` criteria protocol, `<c0>/<r0>` sentence tagging) that llama.cpp's template does **not** build. Adding those means pulling in [Mellea](https://mellea.ai)'s `IntrinsicsRewriter` to construct the envelope — intentionally out of scope here to keep the demo dependency-free.
+
+> `query_clarification` was tried and dropped: its rendered template is identical to the two above (so token placement is correct), but on vague inputs it degrades — leaking a role token mid-generation and never reliably emitting the clarifying question that is its whole purpose. Its open-ended output appears more sensitive to the exact trained input framing than the two tight-output adapters, so it doesn't work cleanly over the raw template.
 
 ## Prerequisites
 
