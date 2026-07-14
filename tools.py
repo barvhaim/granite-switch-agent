@@ -139,7 +139,7 @@ def _adapter_query_clarification(
         documents=documents or [],
         max_tokens=128,
     )
-    parsed = _try_json(out.content)
+    parsed = _try_json(out.content) or _last_json_object(out.content)
     if isinstance(parsed, dict) and "clarification" in parsed:
         return parsed["clarification"]
     return out.content.strip()
@@ -150,6 +150,23 @@ def _try_json(s: str) -> Any:
         return json.loads(s)
     except (json.JSONDecodeError, TypeError):
         return None
+
+
+def _last_json_object(s: str) -> Any:
+    """Return the last parseable ``{...}`` object in ``s``, ignoring surrounding text.
+
+    On vague inputs query_clarification can emit a truncated object, leak a role
+    token, then restart with a clean object; the last valid one is the answer.
+    """
+    dec = json.JSONDecoder()
+    found = None
+    for i, ch in enumerate(s):
+        if ch == "{":
+            try:
+                found = dec.raw_decode(s[i:])[0]
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return found
 
 
 # ---------------------------------------------------------------------------
