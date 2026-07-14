@@ -43,9 +43,7 @@ SYSTEM_PROMPT = (
 
 MAX_STEPS = 8
 
-# Names the model might emit as bare text when it means to *call* a tool. Small
-# models sometimes write the tool name instead of producing a real tool call; we
-# detect that so we don't hand the raw word back as the answer.
+# Tool names, to catch a model that writes a name instead of calling the tool.
 TOOL_NAMES = {t["function"]["name"] for t in TOOL_SCHEMAS}
 
 
@@ -83,19 +81,15 @@ class Agent:
             {"role": "user", "content": question},
         ]
         self.retrieved = []
+        shown = 0  # displayed step number; skips silent nudge iterations
 
-        for step in range(1, MAX_STEPS + 1):
+        for _ in range(MAX_STEPS):
             result = self.client.chat(messages, tools=TOOL_SCHEMAS, max_tokens=512)
 
             if not result.tool_calls:
                 answer = result.content.strip()
-                # Guard: the model sometimes writes a tool's name as plain text
-                # instead of emitting a real tool call. Don't surface that word as
-                # the answer — nudge it to either call the tool or answer properly.
+                # Model wrote a tool name as text instead of calling it: nudge, don't return it.
                 if answer in TOOL_NAMES:
-                    self._log(
-                        _c(f"  [step {step}] NUDGE  bare tool name {answer!r}", Colors.YELLOW)
-                    )
                     messages.append({"role": "assistant", "content": answer})
                     messages.append(
                         {
@@ -123,10 +117,11 @@ class Agent:
                 }
             )
 
+            shown += 1
             for call in result.tool_calls:
                 name = call.get("function", {}).get("name", "")
                 args = parse_json_arguments(call)
-                observation = self._dispatch(step, name, args)
+                observation = self._dispatch(shown, name, args)
                 messages.append(
                     {
                         "role": "tool",
