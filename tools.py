@@ -61,6 +61,17 @@ CORPUS: list[dict[str, str]] = [
 ]
 
 
+# Stable 1-based label per doc_id, fixed by corpus order (france -> "Doc 1").
+# Used for human-friendly trace output; a doc keeps the same number across searches.
+_DOC_NUMBER: dict[str, int] = {d["doc_id"]: i for i, d in enumerate(CORPUS, 1)}
+
+
+def doc_label(doc: dict[str, Any]) -> str:
+    """Human-friendly label for a retrieved doc, e.g. ``Doc 1 (france)``."""
+    doc_id = doc["doc_id"]
+    return f"Doc {_DOC_NUMBER[doc_id]} ({doc_id})"
+
+
 def search_docs(query: str, top_k: int = 2) -> list[dict[str, Any]]:
     """Keyword-overlap retrieval over the in-memory corpus.
 

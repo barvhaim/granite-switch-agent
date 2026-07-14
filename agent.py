@@ -23,7 +23,7 @@ import json
 from typing import Any
 
 from llama_client import LlamaClient, parse_json_arguments
-from tools import ADAPTER_IMPLS, TOOL_SCHEMAS, search_docs
+from tools import ADAPTER_IMPLS, TOOL_SCHEMAS, doc_label, search_docs
 
 SYSTEM_PROMPT = (
     "You are a careful research assistant.\n"
@@ -136,9 +136,10 @@ class Agent:
         for d in docs:
             if d["doc_id"] not in seen:
                 self.retrieved.append(d)
+        labels = ", ".join(doc_label(d) for d in docs) or "(no matches)"
         self._log(
             _c(f"  [step {step}] TOOL  search_docs({query!r})", Colors.CYAN)
-            + _c(f" → {[d['doc_id'] for d in docs]}", Colors.DIM)
+            + _c(f" → {labels}", Colors.DIM)
         )
         return docs
 
