@@ -56,6 +56,9 @@ MAX_STEPS = 8
 # Tool names, to catch a model that writes a name instead of calling the tool.
 TOOL_NAMES = {t["function"]["name"] for t in TOOL_SCHEMAS}
 
+# Adapters that need retrieved docs; called with none they only ever say 'unanswerable'.
+DOC_DEPENDENT_ADAPTERS = {"answerability"}
+
 
 class Colors:
     DIM = "\033[2m"
@@ -91,6 +94,7 @@ class Agent:
             {"role": "user", "content": question},
         ]
         self.retrieved = []
+        self.current_question = question  # updated if query_rewrite decontextualizes it
         shown = 0  # displayed step number; skips silent nudge iterations
 
         for _ in range(MAX_STEPS):
@@ -139,6 +143,13 @@ class Agent:
                         "content": json.dumps(observation, default=str),
                     }
                 )
+                # query_rewrite gives a standalone question; use it for later checks.
+                if name == "query_rewrite" and isinstance(observation, str):
+                    self.current_question = observation
+                # Always verify retrieval: chain answerability after every search.
+                if name == "search_docs":
+                    shown += 1
+                    messages.append(self._auto_answerability(shown, call))
 
         stopped = "(stopped: reached max steps without a final answer)"
         self._commit(question, stopped)
@@ -173,16 +184,34 @@ class Agent:
         )
         return docs
 
-    def _run_adapter(self, step: int, name: str, args: dict[str, Any]) -> Any:
+    def _run_adapter(
+        self, step: int, name: str, args: dict[str, Any], *, auto: bool = False
+    ) -> Any:
+        if name in DOC_DEPENDENT_ADAPTERS and not self.retrieved:
+            self._log(
+                _c(f"  [step {step}] SKIP  {name} (no documents yet)", Colors.YELLOW)
+            )
+            return {"note": f"No documents retrieved yet. Call search_docs before {name}."}
         impl = ADAPTER_IMPLS[name]
-        # Adapter tools operate on the docs retrieved so far.
         out = impl(self.client, args, self.retrieved)
+        tag = "ADAPTER*" if auto else "ADAPTER"
         self._log(
-            _c(f"  [step {step}] ADAPTER  {name}", Colors.MAGENTA)
+            _c(f"  [step {step}] {tag}  {name}", Colors.MAGENTA)
             + _c(f"  (adapter_name={name!r})", Colors.DIM)
             + _c(f" → {out!r}", Colors.DIM)
         )
         return out
+
+    def _auto_answerability(self, step: int, search_call: dict[str, Any]) -> dict[str, Any]:
+        """Run answerability on the current question right after a search."""
+        verdict = self._run_adapter(
+            step, "answerability", {"question": self.current_question}, auto=True
+        )
+        return {
+            "role": "tool",
+            "tool_call_id": f"auto_answerability_{search_call.get('id', step)}",
+            "content": json.dumps({"answerability": verdict}, default=str),
+        }
 
     def _log(self, msg: str) -> None:
         if self.verbose:
